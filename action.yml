@@ -1,0 +1,125 @@
+name: Yarn Merge Reports Action
+description: A GitHub Action to merge coverage reports from multiple test runs using nyc
+
+inputs:
+  node-version:
+    description: "The node version to use"
+    required: false
+    default: "22"
+  coverage-dir:
+    description: "Directory where merged coverage output is written"
+    required: false
+    default: "./test/.merged-coverage"
+  test-artifact-1:
+    description: "First test coverage artifact to download"
+    required: false
+    default: "coverage-unit"
+  test-artifact-2:
+    description: "Second test coverage artifact to download"
+    required: false
+    default: "coverage-integration"
+  test-artifact-3:
+    description: "Third test coverage artifact to download"
+    required: false
+    default: ""
+  codecov-token:
+    description: "Codecov token. If set, uploads merged coverage to Codecov."
+    required: false
+    default: ""
+outputs:
+  total-lines:
+    description: "Total lines to cover with tests"
+    value: ${{ steps.report-coverage.outputs.total-lines }}
+  lines-covered:
+    description: "Total lines covered with tests"
+    value: ${{ steps.report-coverage.outputs.lines-covered }}
+  coverage-percentage:
+    description: "The coverage percentage"
+    value: ${{ steps.report-coverage.outputs.coverage-percentage }}
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    - name: Download first test coverage artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: ${{ inputs.test-artifact-1 }}
+        path: .nyc_input/artifact-1
+
+    - name: Download second test coverage artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: ${{ inputs.test-artifact-2 }}
+        path: .nyc_input/artifact-2
+
+    - name: Download third test coverage artifact
+      if: ${{ inputs.test-artifact-3 != '' }}
+      uses: actions/download-artifact@v4
+      with:
+        name: ${{ inputs.test-artifact-3 }}
+        path: .nyc_input/artifact-3
+
+    - name: Install nyc
+      shell: bash
+      run: npm install -g nyc
+
+    - name: Merge coverage reports
+      shell: bash
+      run: |
+        mkdir -p .nyc_output
+        nyc merge .nyc_input .nyc_output/coverage.json
+
+    - name: Generate merged reports
+      shell: bash
+      run: |
+        mkdir -p ${{ inputs.coverage-dir }}
+        nyc report \
+          --reporter=text \
+          --reporter=cobertura \
+          --reporter=json-summary \
+          --report-dir=${{ inputs.coverage-dir }}
+
+    - name: Report coverage
+      id: report-coverage
+      if: ${{ !cancelled() }}
+      shell: bash
+      run: |
+        SUMMARY="${{ inputs.coverage-dir }}/coverage-summary.json"
+        if [ -f "$SUMMARY" ]; then
+          TOTAL=$(jq '.total.lines.total' "$SUMMARY")
+          COVERED=$(jq '.total.lines.covered' "$SUMMARY")
+          PERCENTAGE=$(jq '.total.lines.pct | .*100.0 + 0.5|floor/100.0' "$SUMMARY")
+
+          echo "$COVERED / $TOTAL lines covered"
+          echo "$PERCENTAGE% covered"
+
+          echo "total-lines=$TOTAL" >> "$GITHUB_OUTPUT"
+          echo "lines-covered=$COVERED" >> "$GITHUB_OUTPUT"
+          echo "coverage-percentage=$PERCENTAGE" >> "$GITHUB_OUTPUT"
+
+          MISSED=$((TOTAL - COVERED))
+          echo "## Merged Coverage" >> $GITHUB_STEP_SUMMARY
+          echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "| --- | --- |" >> $GITHUB_STEP_SUMMARY
+          echo "| Coverage | ${PERCENTAGE}% |" >> $GITHUB_STEP_SUMMARY
+          echo "| Lines Covered | $COVERED |" >> $GITHUB_STEP_SUMMARY
+          echo "| Lines Missed | $MISSED |" >> $GITHUB_STEP_SUMMARY
+          echo "| Total Lines | $TOTAL |" >> $GITHUB_STEP_SUMMARY
+        else
+          echo -e "\e[33mMerged coverage summary not found!\e[0m"
+          echo "## Merged Coverage" >> $GITHUB_STEP_SUMMARY
+          echo "Coverage report not available." >> $GITHUB_STEP_SUMMARY
+        fi
+
+    - name: Upload coverage to Codecov
+      if: ${{ !cancelled() && inputs.codecov-token != '' }}
+      uses: codecov/codecov-action@v5
+      with:
+        files: ${{ inputs.coverage-dir }}/cobertura-coverage.xml
+        token: ${{ inputs.codecov-token }}
+        fail_ci_if_error: false
