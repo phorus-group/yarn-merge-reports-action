@@ -18,10 +18,6 @@ inputs:
     description: "Second test coverage artifact to download"
     required: false
     default: "coverage-integration"
-  test-artifact-3:
-    description: "Third test coverage artifact to download"
-    required: false
-    default: ""
   codecov-token:
     description: "Codecov token. If set, uploads merged coverage to Codecov."
     required: false
@@ -56,13 +52,6 @@ runs:
       with:
         name: ${{ inputs.test-artifact-2 }}
         path: .nyc_input/artifact-2
-
-    - name: Download third test coverage artifact
-      if: ${{ inputs.test-artifact-3 != '' }}
-      uses: actions/download-artifact@v4
-      with:
-        name: ${{ inputs.test-artifact-3 }}
-        path: .nyc_input/artifact-3
 
     - name: Install nyc
       shell: bash
