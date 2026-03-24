@@ -80,9 +80,9 @@ runs:
       run: |
         SUMMARY="${{ inputs.coverage-dir }}/coverage-summary.json"
         if [ -f "$SUMMARY" ]; then
-          TOTAL=$(jq '.total.lines.total' "$SUMMARY")
-          COVERED=$(jq '.total.lines.covered' "$SUMMARY")
-          PERCENTAGE=$(jq '.total.lines.pct | .*100.0 + 0.5|floor/100.0' "$SUMMARY")
+          TOTAL=$(jq '.total.lines.total // 0' "$SUMMARY")
+          COVERED=$(jq '.total.lines.covered // 0' "$SUMMARY")
+          PERCENTAGE=$(jq '(.total.lines.pct // 0) | if type == "number" then .*100.0 + 0.5|floor/100.0 else 0 end' "$SUMMARY")
 
           echo "$COVERED / $TOTAL lines covered"
           echo "$PERCENTAGE% covered"
