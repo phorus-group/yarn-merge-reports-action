@@ -111,4 +111,5 @@ runs:
       with:
         files: ${{ inputs.coverage-dir }}/cobertura-coverage.xml
         token: ${{ inputs.codecov-token }}
+        disable_search: true
         fail_ci_if_error: false
